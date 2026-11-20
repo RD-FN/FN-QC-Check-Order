@@ -3,13 +3,20 @@
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const CHANNELS = ["Shopee","Lazada","TikTok Shop","LINE OA","Facebook","เว็บไซต์","หน้าร้าน","อื่นๆ"];
+const CHANNELS = ["Shopee","Makro PRO","LINE OA","Facebook","เว็บไซต์","หน้าร้าน","อื่นๆ"];
+const OTHER = "อื่นๆ";
 const MAX_PHOTOS = 6;
 const CFG = Object.assign({ SHEETS_URL: "", API_KEY: "" }, window.QC_CONFIG || {});
 
 /* ---------- version ---------- */
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 const CHANGELOG = [
+  { v: "1.3.0", date: "2026-11-20", notes: [
+    "ช่องทางการขาย: เอา Lazada และ TikTok Shop ออก เพิ่ม Makro PRO",
+    "เลือก “อื่นๆ” แล้วต้องพิมพ์ระบุว่าเป็นช่องทางไหน",
+    "เพิ่มรูปสินค้า: แนบรูปในหน้ารายการสินค้า หรือใส่ลิงก์รูปในไฟล์ CSV / Excel (คอลัมน์ รูปสินค้า)",
+    "แสดงรูปสินค้าในรายการเช็ค แตะรูปเพื่อดูขนาดใหญ่"
+  ]},
   { v: "1.2.0", date: "2026-11-20", notes: [
     "ต้องใส่รหัสผู้ดูแลก่อนนำเข้าไฟล์ CSV / Excel เพิ่ม หรือลบรายการสินค้า",
     "ต้องใส่รหัสผู้ดูแลก่อนลบบันทึกผลตรวจ",
@@ -115,7 +122,10 @@ $("#channels").addEventListener("click", e => {
   const b = e.target.closest(".chip"); if (!b) return;
   S.channel = S.channel === b.dataset.c ? "" : b.dataset.c;
   $$("#channels .chip").forEach(x => x.setAttribute("aria-pressed", x.dataset.c === S.channel ? "true" : "false"));
+  $("#channelOther").hidden = S.channel !== OTHER;
+  if (S.channel === OTHER) $("#channelOther").focus();
 });
+function channelValue(){ return S.channel === OTHER ? OTHER + ": " + $("#channelOther").value.trim() : S.channel; }
 $("#inspector").value = lsGet("qc_inspector", "");
 $("#inspector").addEventListener("input", e => { lsSet("qc_inspector", e.target.value.trim()); updateSigName(); });
 $("#orderNo").addEventListener("input", () => { renderList(); });
@@ -127,11 +137,22 @@ function normProduct(p){
   const o = {
     code: String(p.code ?? "").trim(), name: String(p.name ?? "").trim(),
     qty: Math.max(1, parseInt(p.qty, 10) || 1), unit: String(p.unit ?? "").trim(),
-    order: String(p.order ?? "").trim(), category: String(p.category ?? "").trim()
+    order: String(p.order ?? "").trim(), category: String(p.category ?? "").trim(),
+    image: imgUrl(p.image)
   };
   o.id = "p" + hash(o.order + "|" + (o.code || o.name));
   return o;
 }
+/* turn a Google Drive share link into a direct thumbnail URL; keep other http(s)/data URLs */
+function imgUrl(v){
+  v = String(v ?? "").trim(); if (!v) return "";
+  const m = v.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/);
+  if (m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
+  return /^(https?:|data:image\/)/i.test(v) ? v : "";
+}
+const BOX_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>';
+function thumb(p, cls){ return p.image ? `<img class="${cls}" src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy" data-zoom="${esc(p.image)}" data-noclick>` : `<div class="${cls}" aria-hidden="true">${BOX_ICON}</div>`; }
+function zoomImg(src, name){ modal(`<div class="lightbox"><img src="${esc(src)}" alt="${esc(name || "")}"></div>${name ? `<p class="hint" style="margin-top:8px">${esc(name)}</p>` : ""}<div class="acts"><button class="btn btn-ghost" data-close>ปิด</button></div>`); }
 function orders(){ return [...new Set(S.products.map(p => p.order).filter(Boolean))]; }
 function activeOrder(){ const v = $("#orderNo").value.trim(); return v && S.products.some(p => p.order === v) ? v : ""; }
 function scope(){ const o = activeOrder(); return o ? S.products.filter(p => p.order === o) : S.products; }
@@ -164,8 +185,8 @@ function renderList(){
       const qv = S.qty[p.id] ?? p.qty;
       return `<div class="item${at ? " on" : ""}" data-id="${p.id}" role="checkbox" aria-checked="${at ? "true" : "false"}" tabindex="0">
         <span class="tick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
-        <span><div class="nm">${esc(p.name)}</div>
-          <div class="meta">${p.code ? `<span>${esc(p.code)}</span>` : ""}${p.category ? `<span>${esc(p.category)}</span>` : ""}${ao ? `<span>ต้องมี ${p.qty} ${esc(p.unit)}</span>` : ""}${at ? `<span class="at num">เช็ค ${hm(new Date(at))} น.</span>` : ""}</div></span>
+        <span class="pinfo">${thumb(p, "pthumb")}<div><div class="nm">${esc(p.name)}</div>
+          <div class="meta">${p.code ? `<span>${esc(p.code)}</span>` : ""}${p.category ? `<span>${esc(p.category)}</span>` : ""}${ao ? `<span>ต้องมี ${p.qty} ${esc(p.unit)}</span>` : ""}${at ? `<span class="at num">เช็ค ${hm(new Date(at))} น.</span>` : ""}</div></div></span>
         <span class="qty" data-noclick>
           <button type="button" data-d="-1" aria-label="ลดจำนวน">−</button>
           <input type="number" inputmode="numeric" min="0" value="${qv}" aria-label="จำนวน ${esc(p.name)}">
@@ -193,6 +214,7 @@ function toggle(id){
 }
 $("#list").addEventListener("click", e => {
   const go = e.target.closest("[data-go]"); if (go) { show(go.dataset.go); return; }
+  const z = e.target.closest("[data-zoom]"); if (z) { zoomImg(z.dataset.zoom, z.alt); return; }
   const item = e.target.closest(".item"); if (!item) return;
   const step = e.target.closest("[data-d]");
   if (step) {
@@ -354,6 +376,7 @@ $("#saveBtn").addEventListener("click", async () => {
   const problems = [];
   if (!orderNo) problems.push("กรอกเลขออร์เดอร์");
   if (!inspector) problems.push("กรอกชื่อผู้ตรวจ QC");
+  if (S.channel === OTHER && !$("#channelOther").value.trim()) problems.push("ระบุช่องทางการขาย (อื่นๆ) ว่าเป็นช่องทางไหน");
   if (!checkedIds.length) problems.push("เช็คสินค้าอย่างน้อย 1 รายการ");
   if (!S.photos.length) problems.push("แนบรูปถ่ายก่อนจัดส่งอย่างน้อย 1 รูป");
   if (!sig.strokes.length) problems.push("เซ็นลายเซ็นผู้ตรวจ");
@@ -373,7 +396,7 @@ $("#saveBtn").addEventListener("click", async () => {
     const now = new Date();
     const items = S.products.filter(p => S.checks[p.id]).map(p => ({ code: p.code, name: p.name, unit: p.unit, qty: S.qty[p.id] ?? p.qty, expected: ao ? p.qty : null, checkedAt: S.checks[p.id] }));
     const rec = {
-      id: makeId(now), orderNo, inspector, channel: S.channel, customer: $("#customer").value.trim(), tracking: $("#tracking").value.trim(),
+      id: makeId(now), orderNo, inspector, channel: channelValue(), customer: $("#customer").value.trim(), tracking: $("#tracking").value.trim(),
       note: $("#note").value.trim(), items, itemCount: items.length, expectedCount: expected ? expected.length : null,
       missing: missing.map(p => ({ code: p.code, name: p.name, qty: p.qty })),
       status: expected ? (missing.length ? "incomplete" : "complete") : "checked",
@@ -397,6 +420,7 @@ $("#saveBtn").addEventListener("click", async () => {
 });
 function resetForm(){
   S.checks = {}; S.qty = {}; S.startedAt = null; S.channel = "";
+  $("#channelOther").value = ""; $("#channelOther").hidden = true;
   S.photos.forEach(p => URL.revokeObjectURL(p.url)); S.photos = [];
   sig.strokes = []; sigRedraw();
   ["#orderNo","#customer","#tracking","#note","#q"].forEach(s => $(s).value = ""); S.q = "";
@@ -516,13 +540,16 @@ function renderProducts(){
   $("#orderList").innerHTML = os.map(o => `<option value="${esc(o)}"></option>`).join("");
   const q = $("#pq").value.trim().toLowerCase();
   const rows = S.products.filter(p => !q || `${p.name} ${p.code} ${p.order} ${p.category}`.toLowerCase().includes(q));
-  $("#ptable").innerHTML = rows.length ? rows.slice(0, 500).map(p => `<tr><td>${esc(p.code) || "-"}</td><td>${esc(p.name)}${p.category ? `<div class="hint">${esc(p.category)}</div>` : ""}</td><td class="r num">${p.qty}</td><td>${esc(p.unit) || "-"}</td><td>${esc(p.order) || "-"}</td>
-    <td class="r"><button class="btn btn-ghost btn-sm admin-only" data-del="${p.id}" aria-label="ลบ ${esc(p.name)}">ลบ</button></td></tr>`).join("")
-    + (rows.length > 500 ? `<tr><td colspan="6" class="hint">แสดง 500 จาก ${rows.length} รายการ ใช้ช่องค้นหาเพื่อหาสินค้าอื่น</td></tr>` : "")
-    : `<tr><td colspan="6"><div class="empty" style="margin:6px 0"><h3>ยังไม่มีสินค้า</h3><p>นำเข้าไฟล์ CSV / Excel หรือเพิ่มทีละรายการ</p></div></td></tr>`;
+  $("#ptable").innerHTML = rows.length ? rows.slice(0, 500).map(p => `<tr><td>${thumb(p, "tthumb")}</td><td>${esc(p.code) || "-"}</td><td>${esc(p.name)}${p.category ? `<div class="hint">${esc(p.category)}</div>` : ""}</td><td class="r num">${p.qty}</td><td>${esc(p.unit) || "-"}</td><td>${esc(p.order) || "-"}</td>
+    <td class="r"><div class="rowacts"><button class="btn btn-ghost btn-sm admin-only" data-img="${p.id}">${p.image ? "เปลี่ยนรูป" : "เพิ่มรูป"}</button><button class="btn btn-ghost btn-sm admin-only" data-del="${p.id}" aria-label="ลบ ${esc(p.name)}">ลบ</button></div></td></tr>`).join("")
+    + (rows.length > 500 ? `<tr><td colspan="7" class="hint">แสดง 500 จาก ${rows.length} รายการ ใช้ช่องค้นหาเพื่อหาสินค้าอื่น</td></tr>` : "")
+    : `<tr><td colspan="7"><div class="empty" style="margin:6px 0"><h3>ยังไม่มีสินค้า</h3><p>นำเข้าไฟล์ CSV / Excel หรือเพิ่มทีละรายการ</p></div></td></tr>`;
 }
 $("#pq").addEventListener("input", renderProducts);
+let imgTarget = "";
 $("#ptable").addEventListener("click", async e => {
+  const z = e.target.closest("[data-zoom]"); if (z) { zoomImg(z.dataset.zoom, z.alt); return; }
+  const ib = e.target.closest("[data-img]"); if (ib) { imgTarget = ib.dataset.img; $("#prodImgInput").click(); return; }
   const b = e.target.closest("[data-del]"); if (!b) return;
   await saveProducts(S.products.filter(p => p.id !== b.dataset.del));
 });
@@ -538,9 +565,36 @@ $("#addForm").addEventListener("submit", async e => {
   e.preventDefault();
   const p = normProduct({ name: $("#aName").value, code: $("#aCode").value, qty: $("#aQty").value, unit: $("#aUnit").value, order: $("#aOrder").value });
   if (!p.name) return;
+  const f = $("#aImg").files[0];
+  if (f) { try { toast("กำลังอัปโหลดรูป…"); p.image = await uploadProductImage(f, p.code || p.name); } catch (err) { toast("อัปโหลดรูปไม่สำเร็จ: " + err.message, true); return; } }
   await saveProducts(mergeProducts(S.products, [p]));
   toast("เพิ่ม “" + p.name + "” แล้ว");
-  ["#aName","#aCode","#aUnit"].forEach(s => $(s).value = ""); $("#aQty").value = 1; $("#aName").focus();
+  ["#aName","#aCode","#aUnit","#aImg"].forEach(s => $(s).value = ""); $("#aQty").value = 1; $("#aName").focus();
+});
+async function resizeToDataURL(file, max, q){
+  const im = await loadImage(file); const r = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth * r); c.height = Math.round(im.naturalHeight * r);
+  c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", q);
+}
+/* product photo: Google Drive (sheets mode) or a small inline image elsewhere */
+async function uploadProductImage(file, name){
+  if (S.mode === "sheets") {
+    const data = await resizeToDataURL(file, 900, .82);
+    const j = await sheetsApi("uploadProductImage", { pin: S.pin, data, name });
+    return j.url;
+  }
+  return await resizeToDataURL(file, 360, .7);
+}
+$("#prodImgInput").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f || !imgTarget) return;
+  const p = S.products.find(x => x.id === imgTarget); if (!p) return;
+  try {
+    toast("กำลังอัปโหลดรูป…");
+    const url = await uploadProductImage(f, p.code || p.name);
+    await saveProducts(S.products.map(x => x.id === p.id ? Object.assign({}, x, { image: url }) : x));
+    toast("บันทึกรูปของ “" + p.name + "” แล้ว");
+  } catch (err) { if (/รหัส/.test(err.message)) setPin(""); toast("อัปโหลดรูปไม่สำเร็จ: " + err.message, true); }
 });
 function mergeProducts(base, incoming){
   const map = new Map(base.map(p => [p.id, p]));
@@ -569,6 +623,7 @@ const MATCH = [
   ["qty", /จำนวน|qty|quantity|pcs|amount/i],
   ["unit", /หน่วย|unit|uom/i],
   ["category", /หมวด|ประเภท|category|type|กลุ่ม/i],
+  ["image", /รูป|ภาพ|image|photo|picture|img/i],
   ["name", /ชื่อ|สินค้า|name|product|item|รายการ|description|title/i]
 ];
 function mapRows(rows){
@@ -584,7 +639,7 @@ function mapRows(rows){
     if (rows[0].length === 1) idx.name = 0;
     else { idx.code = 0; idx.name = 1; if (rows[0].length > 2) idx.qty = 2; if (rows[0].length > 3) idx.unit = 3; }
   }
-  return body.map(r => normProduct({ code: r[idx.code], name: r[idx.name], qty: r[idx.qty], unit: r[idx.unit], order: r[idx.order], category: r[idx.category] })).filter(p => p.name);
+  return body.map(r => normProduct({ code: r[idx.code], name: r[idx.name], qty: r[idx.qty], unit: r[idx.unit], order: r[idx.order], category: r[idx.category], image: r[idx.image] })).filter(p => p.name);
 }
 async function importFile(file){
   const n = file.name.toLowerCase(); const buf = await file.arrayBuffer();
@@ -612,7 +667,7 @@ const drop = $("#drop");
 ["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => handleFiles(Array.from(e.dataTransfer.files)));
 $("#dlTemplate").addEventListener("click", async () => {
-  const csv = "﻿รหัสสินค้า,ชื่อสินค้า,จำนวน,หน่วย,เลขออร์เดอร์,หมวดหมู่\r\nSKU-001,ตัวอย่าง สินค้า A,2,ซอง,2611200001,หมวด 1\r\nSKU-002,ตัวอย่าง สินค้า B,1,กล่อง,2611200001,หมวด 1\r\nSKU-003,ตัวอย่าง สินค้า C,3,ชิ้น,2611200002,หมวด 2\r\n";
+  const csv = "﻿รหัสสินค้า,ชื่อสินค้า,จำนวน,หน่วย,เลขออร์เดอร์,หมวดหมู่,รูปสินค้า\r\nSKU-001,ตัวอย่าง สินค้า A,2,ซอง,2611200001,หมวด 1,\r\nSKU-002,ตัวอย่าง สินค้า B,1,กล่อง,2611200001,หมวด 1,\r\nSKU-003,ตัวอย่าง สินค้า C,3,ชิ้น,2611200002,หมวด 2,\r\n";
   if (S.downloads) { try { await S.downloads.save({ filename: "qc-product-template.csv", data: csv }); return; } catch (err) { if (err && err.code === "declined") return; } }
   try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"})); a.download = "qc-product-template.csv"; a.click(); }
   catch (err) { toast("ดาวน์โหลดไม่ได้ในหน้านี้", true); }
