@@ -9,6 +9,7 @@
  *   POST {action:"saveRecord", record:{...}}
  *   POST {action:"saveProducts", products:[...]}
  *   POST {action:"deleteRecord", id:"QC-...", pin:"..."}
+ *   POST {action:"deleteRecords", ids:["QC-...", ...], pin:"..."}   (ลบหลายรายการ + ย้ายรูป/ลายเซ็นไปถังขยะ)
  *   POST {action:"verifyPin", pin:"..."}
  *   POST {action:"uploadProductImage", pin:"...", data:"data:image/jpeg;base64,...", name:"..."}
  *
@@ -81,7 +82,8 @@ function doPost(e) {
       case 'saveRecord':   return json_({ ok: true, record: saveRecord_(body.record, body.appVersion) });
       case 'verifyPin':    checkPin_(body.pin); return json_({ ok: true });
       case 'saveProducts': checkPin_(body.pin); return json_({ ok: true, count: saveProducts_(body.products || []) });
-      case 'deleteRecord': checkPin_(body.pin); return json_({ ok: true, deleted: deleteRecord_(body.id) });
+      case 'deleteRecord': checkPin_(body.pin); return json_({ ok: true, deleted: deleteRecords_([body.id]).deleted > 0 });
+      case 'deleteRecords': checkPin_(body.pin); return json_(Object.assign({ ok: true }, deleteRecords_(body.ids)));
       case 'uploadProductImage': checkPin_(body.pin); return json_(Object.assign({ ok: true }, uploadProductImage_(body.data, body.name)));
       default: throw new Error('ไม่รู้จักคำสั่ง: ' + body.action);
     }
@@ -152,18 +154,38 @@ function getRecords_(limit) {
   return values.reverse().filter(function (r) { return r[0]; }).map(rowToRecord_);
 }
 
-function deleteRecord_(id) {
-  if (!id) throw new Error('ไม่มีรหัสบันทึก');
+// ลบบันทึกผลตรวจ (QC_Records + QC_Items) และย้ายรูป/ลายเซ็นของบันทึกนั้นไปถังขยะใน Drive (กู้คืนได้ 30 วัน)
+function deleteRecords_(ids) {
+  const want = {};
+  (ids || []).forEach(function (i) { if (i) want[String(i)] = true; });
+  if (!Object.keys(want).length) throw new Error('ไม่ได้เลือกบันทึกที่จะลบ');
+  let deleted = 0, files = 0;
   const sh = ensureSheet_(SHEET_RECORDS, RECORD_HEADERS, 5);
-  const found = sh.getRange('A:A').createTextFinder(id).matchEntireCell(true).findNext();
-  if (!found) return false;
-  sh.deleteRow(found.getRow());
+  const iPh = RECORD_HEADERS.indexOf('photos_json'), iSig = RECORD_HEADERS.indexOf('signature_json');
+  deleteRowsWhere_(sh, RECORD_HEADERS.length, function (r) {
+    if (!want[String(r[0])]) return false;
+    const fids = parse_(r[iPh], []).map(function (p) { return p && p.id; });
+    const sig = parse_(r[iSig], null); if (sig && sig.id) fids.push(sig.id);
+    fids.forEach(function (fid) { if (!fid) return; try { DriveApp.getFileById(fid).setTrashed(true); files++; } catch (e) {} });
+    deleted++;
+    return true;
+  });
   const ish = ss_().getSheetByName(SHEET_ITEMS);
-  if (ish && ish.getLastRow() > 1) {
-    const ids = ish.getRange(2, 1, ish.getLastRow() - 1, 1).getValues();
-    for (let i = ids.length - 1; i >= 0; i--) if (ids[i][0] === id) ish.deleteRow(i + 2);
+  if (ish) deleteRowsWhere_(ish, 1, function (r) { return !!want[String(r[0])]; });
+  return { deleted: deleted, files: files };
+}
+// ลบแถวที่ตรงเงื่อนไข จากล่างขึ้นบน รวบแถวที่ติดกันเป็นก้อนเดียว (ไม่เขียนค่าใหม่ทับ เลข 0 นำหน้าจึงไม่หาย)
+function deleteRowsWhere_(sh, width, match) {
+  const last = sh.getLastRow();
+  if (last < 2) return 0;
+  const vals = sh.getRange(2, 1, last - 1, width).getValues();
+  let n = 0, runEnd = -1;
+  for (let i = vals.length - 1; i >= -1; i--) {
+    const hit = i >= 0 && match(vals[i]);
+    if (hit && runEnd < 0) runEnd = i;
+    if (!hit && runEnd >= 0) { sh.deleteRows(i + 3, runEnd - i); n += runEnd - i; runEnd = -1; }
   }
-  return true; // รูปใน Drive ยังเก็บไว้ ลบเองได้ถ้าต้องการ
+  return n;
 }
 
 function rowToRecord_(r) {
