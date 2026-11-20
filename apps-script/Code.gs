@@ -8,7 +8,11 @@
  *   GET  ?action=ping | products | records
  *   POST {action:"saveRecord", record:{...}}
  *   POST {action:"saveProducts", products:[...]}
- *   POST {action:"deleteRecord", id:"QC-..."}
+ *   POST {action:"deleteRecord", id:"QC-...", pin:"..."}
+ *   POST {action:"verifyPin", pin:"..."}
+ *
+ * รหัสผู้ดูแล (สำหรับนำเข้า/แก้ไขรายการสินค้า และลบบันทึก) เก็บใน
+ * Project Settings > Script Properties ชื่อ ADMIN_PIN — ไม่ได้อยู่ในโค้ดนี้
  */
 
 // ====== ตั้งค่า ======
@@ -74,8 +78,9 @@ function doPost(e) {
     lock.waitLock(30000);
     switch (body.action) {
       case 'saveRecord':   return json_({ ok: true, record: saveRecord_(body.record, body.appVersion) });
-      case 'saveProducts': return json_({ ok: true, count: saveProducts_(body.products || []) });
-      case 'deleteRecord': return json_({ ok: true, deleted: deleteRecord_(body.id) });
+      case 'verifyPin':    checkPin_(body.pin); return json_({ ok: true });
+      case 'saveProducts': checkPin_(body.pin); return json_({ ok: true, count: saveProducts_(body.products || []) });
+      case 'deleteRecord': checkPin_(body.pin); return json_({ ok: true, deleted: deleteRecord_(body.id) });
       default: throw new Error('ไม่รู้จักคำสั่ง: ' + body.action);
     }
   } catch (err) {
@@ -233,5 +238,18 @@ function thumbUrl_(id) { return 'https://drive.google.com/thumbnail?id=' + id + 
 function text_(v) { v = String(v == null ? '' : v); return /^[0-9+\-=]/.test(v) ? "'" + v : v; } // เก็บเลขออร์เดอร์/เลขพัสดุเป็นข้อความ ไม่ให้เลข 0 นำหน้าหาย
 function untext_(v) { return String(v == null ? '' : v).replace(/^'/, ''); }
 function parse_(s, d) { try { return s ? JSON.parse(s) : d; } catch (e) { return d; } }
+/** ตรวจรหัสผู้ดูแล: ผิดเกิน 5 ครั้งใน 10 นาที จะล็อก 10 นาที */
+function checkPin_(pin) {
+  const adminPin = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
+  if (!adminPin) throw new Error('ยังไม่ได้ตั้งรหัสผู้ดูแล (ADMIN_PIN) ใน Apps Script');
+  const cache = CacheService.getScriptCache();
+  const fails = Number(cache.get('pin_fails') || 0);
+  if (fails >= 5) throw new Error('ใส่รหัสผิดหลายครั้ง ระบบล็อกไว้ 10 นาที');
+  if (String(pin || '') !== String(adminPin)) {
+    cache.put('pin_fails', String(fails + 1), 600);
+    throw new Error('รหัสผู้ดูแลไม่ถูกต้อง');
+  }
+  cache.remove('pin_fails');
+}
 function checkKey_(k) { if (API_KEY && k !== API_KEY) throw new Error('รหัส API ไม่ถูกต้อง'); }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
