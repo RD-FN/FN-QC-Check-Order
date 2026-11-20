@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=1.4.0">
 </head>
 <body>
 
@@ -109,9 +109,10 @@
       <div class="card">
         <div class="card-head"><h2><span class="step">4</span>รูปถ่ายก่อนจัดส่ง <span class="req">*</span></h2><span class="hint num" id="phCount">0/6</span></div>
         <div class="photos" id="photos"></div>
-        <input type="file" id="phInput" accept="image/*" multiple hidden>
-        <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
-        <p class="hint" style="margin-top:8px">รูปจะถูกประทับวันเวลาที่มุมล่างให้อัตโนมัติ</p>
+        <input type="file" id="phInput" class="vh" accept="image/*" multiple tabindex="-1" aria-hidden="true">
+        <input type="file" id="camInput" class="vh" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+        <p class="hint warnhint" id="inappHint" hidden>ถ้ากดถ่ายรูปแล้วกล้องไม่ขึ้น ให้เปิดเว็บนี้ใน Chrome หรือ Safari (เปิดผ่าน LINE / Facebook บางเครื่องจะใช้กล้องไม่ได้)</p>
+        <p class="hint" id="phHint" style="margin-top:8px">รูปจะถูกประทับวันเวลาที่มุมล่างให้อัตโนมัติ</p>
       </div>
 
       <div class="card">
@@ -173,6 +174,17 @@
       <input class="inp" id="hdate" type="date" style="max-width:190px" aria-label="กรองตามวันที่">
       <button class="btn btn-ghost btn-sm" id="hclear">ล้างตัวกรอง</button>
       <button class="btn btn-soft btn-sm" id="hrefresh" hidden>ดึงข้อมูลล่าสุด</button>
+      <button class="btn btn-ghost btn-sm" id="hmanage">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        ลบข้อมูล (ผู้ดูแล)</button>
+    </div>
+    <div class="selbar" id="selbar" hidden>
+      <b id="selCount">เลือก 0 รายการ</b>
+      <div class="selacts">
+        <button class="btn btn-ghost btn-sm" id="selAll">เลือกทั้งหมดที่แสดง</button>
+        <button class="btn btn-ghost btn-sm" id="selCancel">ยกเลิก</button>
+        <button class="btn btn-danger btn-sm" id="selDelete" disabled>ลบที่เลือก</button>
+      </div>
     </div>
     <div class="recs" id="recs"></div>
   </div>
@@ -264,7 +276,7 @@
           <tbody id="ptable"></tbody>
         </table>
       </div>
-      <input type="file" id="prodImgInput" accept="image/*" hidden>
+      <input type="file" id="prodImgInput" class="vh" accept="image/*" tabindex="-1" aria-hidden="true">
     </div>
   </div>
 </section>
@@ -284,7 +296,7 @@
 <div class="modal" id="modal" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast" role="status"></div>
 
-<script src="config.js"></script>
-<script src="assets/app.js"></script>
+<script src="config.js?v=1.4.0"></script>
+<script src="assets/app.js?v=1.4.0"></script>
 </body>
 </html>
