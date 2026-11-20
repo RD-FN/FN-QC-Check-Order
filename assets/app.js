@@ -11,8 +11,11 @@ const HAS_WEBCAM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMe
 const CFG = Object.assign({ SHEETS_URL: "", API_KEY: "" }, window.QC_CONFIG || {});
 
 /* ---------- version ---------- */
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 const CHANGELOG = [
+  { v: "1.4.1", date: "2026-11-20", notes: [
+    "หน้าประวัติ: เปลี่ยนช่อง “ครบตามออร์เดอร์” และ “ไม่ครบ” เป็น “สินค้าที่เช็ค (วันนี้)” และ “ผู้ตรวจ (วันนี้)”"
+  ]},
   { v: "1.4.0", date: "2026-11-20", notes: [
     "แก้ปุ่ม “ถ่ายรูป” ให้เปิดกล้องได้แน่นอนขึ้น บนคอมพิวเตอร์จะเปิดกล้องในหน้าเว็บ (เว็บแคม)",
     "มือถือ/แท็บเล็ต: ถ้ากล้องของเครื่องไม่ขึ้น กดปุ่ม “กล้องในเว็บ” แทนได้",
@@ -511,8 +514,8 @@ function renderHistory(){
   const today = ymd(new Date());
   const td = S.records.filter(r => ymd(new Date(r.createdAt)) === today);
   $("#tToday").textContent = td.length;
-  $("#tOk").textContent = td.filter(r => r.status === "complete").length;
-  $("#tWarn").textContent = td.filter(r => r.status === "incomplete").length;
+  $("#tItems").textContent = td.reduce((n, r) => n + (Number(r.itemCount) || 0), 0);
+  $("#tPeople").textContent = new Set(td.map(r => String(r.inspector || "").trim()).filter(Boolean)).size;
   $("#tAll").textContent = S.records.length;
   $("#histBadge").textContent = S.records.length;
   const rs = filteredRecords();
