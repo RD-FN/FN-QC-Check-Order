@@ -6,11 +6,19 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const CHANNELS = ["Shopee","Makro PRO","LINE OA","Facebook","เว็บไซต์","หน้าร้าน","อื่นๆ"];
 const OTHER = "อื่นๆ";
 const MAX_PHOTOS = 6;
+const IS_TOUCH = (window.matchMedia && matchMedia("(pointer:coarse)").matches) || /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const HAS_WEBCAM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && window.isSecureContext !== false;
 const CFG = Object.assign({ SHEETS_URL: "", API_KEY: "" }, window.QC_CONFIG || {});
 
 /* ---------- version ---------- */
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const CHANGELOG = [
+  { v: "1.4.0", date: "2026-11-20", notes: [
+    "แก้ปุ่ม “ถ่ายรูป” ให้เปิดกล้องได้แน่นอนขึ้น บนคอมพิวเตอร์จะเปิดกล้องในหน้าเว็บ (เว็บแคม)",
+    "มือถือ/แท็บเล็ต: ถ้ากล้องของเครื่องไม่ขึ้น กดปุ่ม “กล้องในเว็บ” แทนได้",
+    "ผู้ดูแลลบข้อมูลผลตรวจได้ทีละหลายรายการ (หน้า ประวัติ > ลบข้อมูล) ต้องใส่รหัสผู้ดูแล",
+    "ลบบันทึกแล้วรูปและลายเซ็นใน Google Drive จะถูกย้ายไปถังขยะด้วย (กู้คืนได้ 30 วัน)"
+  ]},
   { v: "1.3.0", date: "2026-11-20", notes: [
     "ช่องทางการขาย: เอา Lazada และ TikTok Shop ออก เพิ่ม Makro PRO",
     "เลือก “อื่นๆ” แล้วต้องพิมพ์ระบุว่าเป็นช่องทางไหน",
@@ -53,7 +61,8 @@ const S = {
   importMode: "merge",
   db: null, assets: null, downloads: null, mode: "local",
   pin: (() => { try { return sessionStorage.getItem("qc_pin") || ""; } catch (e) { return ""; } })(),
-  canWrite: true
+  canWrite: true,
+  selecting: false, sel: new Set()
 };
 
 /* ---------- utils ---------- */
@@ -72,7 +81,9 @@ let toastT;
 function toast(msg, err){ const t = $("#toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove("show"), 3200); }
 
 function modal(html){ $("#sheet").innerHTML = html; $("#modal").classList.add("open"); }
-function closeModal(){ $("#modal").classList.remove("open"); }
+let camStream = null;
+function stopCamera(){ if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } }
+function closeModal(){ stopCamera(); $("#modal").classList.remove("open"); }
 $("#modal").addEventListener("click", e => { if (e.target.id === "modal" || e.target.closest("[data-close]")) closeModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 function confirmBox(title, body, okText, danger){
@@ -256,15 +267,17 @@ function renderPhotos(){
   const box = $("#photos");
   box.innerHTML = S.photos.map((p, i) => `<div class="ph"><img src="${p.url}" alt="รูปที่ ${i+1}"><button class="x" data-rm="${i}" aria-label="ลบรูป">✕</button></div>`).join("")
     + (S.photos.length < MAX_PHOTOS ? `
-      <button class="addph" type="button" id="addCam"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>ถ่ายรูป</button>
-      <button class="addph" type="button" id="addFile"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>เลือกจากเครื่อง</button>` : "");
+      <label class="addph" for="camInput" id="addCam" tabindex="0" role="button"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>ถ่ายรูป</label>
+      <label class="addph" for="phInput" id="addFile" tabindex="0" role="button"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>เลือกจากเครื่อง</label>` : "")
+    + (IS_TOUCH && HAS_WEBCAM && S.photos.length < MAX_PHOTOS ? `<button class="addph" type="button" id="addWebCam"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m23 7-7 5 7 5z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>กล้องในเว็บ</button>` : "");
   $("#phCount").textContent = `${S.photos.length}/${MAX_PHOTOS}`;
 }
 $("#photos").addEventListener("click", e => {
   const rm = e.target.closest("[data-rm]");
   if (rm) { const p = S.photos.splice(+rm.dataset.rm, 1)[0]; URL.revokeObjectURL(p.url); renderPhotos(); return; }
-  if (e.target.closest("#addCam")) $("#camInput").click();
-  if (e.target.closest("#addFile")) $("#phInput").click();
+  // computers: capture="environment" is ignored and only opens a file picker, so use the webcam inside the page
+  if (e.target.closest("#addCam") && !IS_TOUCH && HAS_WEBCAM) { e.preventDefault(); openCamera(); return; }
+  if (e.target.closest("#addWebCam")) { openCamera(); return; }
   const img = e.target.closest(".ph img");
   if (img) modal(`<div class="lightbox"><img src="${img.src}" alt=""></div><div class="acts"><button class="btn btn-ghost" data-close>ปิด</button></div>`);
 });
@@ -297,8 +310,56 @@ async function addFiles(files){
   }
   renderPhotos();
 }
+$("#photos").addEventListener("keydown", e => { const l = e.target.closest("label.addph"); if (l && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); l.click(); } });
 $("#phInput").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
 $("#camInput").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
+
+/* in-page camera (getUserMedia) */
+let camFacing = "environment";
+async function openCamera(){
+  if (S.photos.length >= MAX_PHOTOS) { toast(`แนบรูปได้สูงสุด ${MAX_PHOTOS} รูป`, true); return; }
+  modal(`<h2>ถ่ายรูปก่อนจัดส่ง</h2><div class="cam"><video id="camVideo" autoplay playsinline muted></video><div class="flash" id="camFlash"></div></div>
+    <p class="hint" id="camMsg" style="margin-top:8px">กำลังเปิดกล้อง… ถ้าเบราว์เซอร์ถาม ให้กด “อนุญาต”</p>
+    <div class="camacts"><button class="btn btn-ghost" type="button" id="camFlip" hidden>สลับกล้อง</button>
+    <button class="shutter" type="button" id="camSnap" aria-label="ถ่ายรูป" disabled></button>
+    <button class="btn btn-primary" type="button" data-close>เสร็จ</button></div>`);
+  $("#camSnap").onclick = snapCamera;
+  $("#camFlip").onclick = () => { camFacing = camFacing === "environment" ? "user" : "environment"; startCamera(); };
+  await startCamera();
+}
+async function startCamera(){
+  stopCamera();
+  const msg = $("#camMsg");
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: camFacing }, width: { ideal: 1920 }, height: { ideal: 1440 } } });
+    const v = $("#camVideo"); if (!v) { stopCamera(); return; }
+    v.srcObject = camStream; await v.play().catch(() => {});
+    $("#camSnap").disabled = false;
+    msg.textContent = `กดปุ่มวงกลมเพื่อถ่าย (แนบแล้ว ${S.photos.length}/${MAX_PHOTOS})`;
+    try { const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"); $("#camFlip").hidden = cams.length < 2; } catch (e) {}
+  } catch (err) {
+    const n = err && err.name;
+    msg.innerHTML = n === "NotAllowedError" || n === "SecurityError"
+      ? "เบราว์เซอร์ไม่ได้อนุญาตให้ใช้กล้อง: กดไอคอนแม่กุญแจ/กล้องที่แถบที่อยู่ แล้วเลือก “อนุญาต” จากนั้นกดถ่ายรูปอีกครั้ง"
+      : n === "NotFoundError" || n === "OverconstrainedError" ? "ไม่พบกล้องในเครื่องนี้ ใช้ปุ่ม “เลือกจากเครื่อง” แทน"
+      : n === "NotReadableError" ? "กล้องถูกโปรแกรมอื่นใช้อยู่ ปิดโปรแกรมนั้น (เช่น Zoom, LINE) แล้วลองใหม่"
+      : "เปิดกล้องไม่ได้ (" + esc(n || err) + ") ลองเปิดเว็บใน Chrome หรือ Safari";
+    msg.classList.add("warnhint");
+  }
+}
+async function snapCamera(){
+  const v = $("#camVideo"); if (!v || !v.videoWidth) return;
+  const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext("2d").drawImage(v, 0, 0);
+  const f = $("#camFlash"); f.classList.add("on"); setTimeout(() => f.classList.remove("on"), 30);
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", .92));
+  try { S.photos.push(await processPhoto(blob)); renderPhotos(); } catch (e) { toast("บันทึกรูปไม่สำเร็จ", true); return; }
+  if (S.photos.length >= MAX_PHOTOS) { closeModal(); toast(`ถ่ายครบ ${MAX_PHOTOS} รูปแล้ว`); return; }
+  $("#camMsg").textContent = `ถ่ายแล้ว ${S.photos.length}/${MAX_PHOTOS} รูป ถ่ายต่อได้ หรือกด “เสร็จ”`;
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden && camStream) closeModal(); });
+if (IS_TOUCH && HAS_WEBCAM) $("#phHint").textContent = "รูปจะถูกประทับวันเวลาที่มุมล่างให้อัตโนมัติ · ถ้ากด “ถ่ายรูป” แล้วกล้องไม่ขึ้น ให้ใช้ปุ่ม “กล้องในเว็บ” แทน";
+if (/\bLine\/|FBAN|FBAV|FB_IAB|Instagram|MicroMessenger/i.test(navigator.userAgent)) $("#inappHint").hidden = false;
 renderPhotos();
 
 /* ---------- signature ---------- */
@@ -455,9 +516,20 @@ function renderHistory(){
   $("#tAll").textContent = S.records.length;
   $("#histBadge").textContent = S.records.length;
   const rs = filteredRecords();
+  $("#recs").classList.toggle("selecting", S.selecting);
+  $("#selbar").hidden = !S.selecting;
+  $("#hmanage").hidden = S.selecting;
+  if (S.selecting) {
+    [...S.sel].forEach(id => { if (!S.records.some(r => r.id === id)) S.sel.delete(id); });
+    $("#selCount").textContent = `เลือก ${S.sel.size} รายการ`;
+    $("#selDelete").disabled = !S.sel.size;
+    $("#selDelete").textContent = S.sel.size ? `ลบที่เลือก (${S.sel.size})` : "ลบที่เลือก";
+    $("#selAll").textContent = rs.length && rs.every(r => S.sel.has(r.id)) ? "ไม่เลือกทั้งหมด" : `เลือกทั้งหมดที่แสดง (${rs.length})`;
+  }
   $("#recs").innerHTML = rs.length ? rs.map(r => {
     const d = new Date(r.createdAt); const ph = (r.photos || [])[0];
-    return `<article class="rec ${r.status === "incomplete" ? "incomplete" : ""}" data-rid="${esc(r.id)}" tabindex="0">
+    return `<article class="rec ${r.status === "incomplete" ? "incomplete" : ""}${S.sel.has(r.id) ? " sel" : ""}" data-rid="${esc(r.id)}" tabindex="0">
+      <span class="selbox" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
       ${ph ? `<img class="th" src="${esc(photoSrc(ph))}" alt="" loading="lazy">` : `<div class="th"></div>`}
       <div style="min-width:0"><h3>#${esc(r.orderNo)}</h3>
       <div class="pills"><span class="pill ${r.status === "incomplete" ? "warn" : ""}">${statusLabel(r.status)}</span>${r.channel ? `<span class="pill ch">${esc(r.channel)}</span>` : ""}<span class="pill ch num">${r.itemCount}${r.expectedCount ? "/" + r.expectedCount : ""} รายการ</span></div>
@@ -466,8 +538,37 @@ function renderHistory(){
 }
 ["#hq","#hdate"].forEach(s => $(s).addEventListener("input", renderHistory));
 $("#hclear").addEventListener("click", () => { $("#hq").value = ""; $("#hdate").value = ""; renderHistory(); });
-$("#recs").addEventListener("click", e => { const a = e.target.closest("[data-rid]"); if (a) openRecord(a.dataset.rid); });
-$("#recs").addEventListener("keydown", e => { const a = e.target.closest("[data-rid]"); if (a && e.key === "Enter") openRecord(a.dataset.rid); });
+function recActivate(id){
+  if (!S.selecting) { openRecord(id); return; }
+  S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id);
+  renderHistory();
+  const n = $(`[data-rid="${CSS.escape(id)}"]`); n && n.focus();
+}
+$("#recs").addEventListener("click", e => { const a = e.target.closest("[data-rid]"); if (a) recActivate(a.dataset.rid); });
+$("#recs").addEventListener("keydown", e => { const a = e.target.closest("[data-rid]"); if (a && (e.key === "Enter" || (S.selecting && e.key === " "))) { e.preventDefault(); recActivate(a.dataset.rid); } });
+$("#hmanage").addEventListener("click", async () => {
+  if (!S.records.length) { toast("ยังไม่มีข้อมูลให้ลบ", true); return; }
+  if (S.mode === "sheets" && !S.pin) { const pin = await askPin("ใส่รหัสผู้ดูแลเพื่อเลือกและลบข้อมูลผลตรวจ"); if (!pin) return; }
+  S.selecting = true; S.sel.clear(); renderHistory();
+  toast("แตะรายการที่ต้องการลบ แล้วกด “ลบที่เลือก”");
+});
+$("#selCancel").addEventListener("click", () => { S.selecting = false; S.sel.clear(); renderHistory(); });
+$("#selAll").addEventListener("click", () => {
+  const rs = filteredRecords();
+  if (rs.length && rs.every(r => S.sel.has(r.id))) rs.forEach(r => S.sel.delete(r.id)); else rs.forEach(r => S.sel.add(r.id));
+  renderHistory();
+});
+$("#selDelete").addEventListener("click", async () => {
+  const ids = [...S.sel]; if (!ids.length) return;
+  const names = S.records.filter(r => S.sel.has(r.id)).slice(0, 5).map(r => "#" + esc(r.orderNo)).join(", ");
+  if (!await confirmBox(`ลบ ${ids.length} รายการ?`, `${names}${ids.length > 5 ? " …" : ""}<br>ข้อมูลจะถูกลบออกจาก Google Sheets (QC_Records และ QC_Items) และกู้คืนจากหน้าเว็บไม่ได้${S.mode === "sheets" ? "<br>รูปและลายเซ็นใน Google Drive จะถูกย้ายไปถังขยะ (กู้คืนได้ภายใน 30 วัน)" : ""}`, `ลบ ${ids.length} รายการ`, true)) return;
+  const btn = $("#selDelete"); btn.disabled = true; btn.textContent = "กำลังลบ…";
+  try {
+    const n = await deleteRecords(ids);
+    S.selecting = false; S.sel.clear(); renderHistory();
+    toast(`ลบแล้ว ${n} รายการ`);
+  } catch (err) { renderHistory(); toast("ลบไม่สำเร็จ: " + (err.message || err.code || "error"), true); }
+});
 function openRecord(id){
   const r = S.records.find(x => x.id === id); if (!r) return;
   const d = new Date(r.createdAt), st = r.startedAt ? new Date(r.startedAt) : null;
@@ -493,9 +594,9 @@ function openRecord(id){
     <div class="photos">${(r.photos || []).map(p => `<div class="ph"><a href="${esc(photoLink(p))}" target="_blank" rel="noopener"><img src="${esc(photoSrc(p))}" alt="รูปก่อนจัดส่ง"></a></div>`).join("") || `<p class="hint">ไม่มีรูป</p>`}</div>
     <h3 style="font-size:1rem;margin:14px 0 8px">ลายเซ็นผู้ตรวจ</h3>
     ${r.signature ? `<img class="sigimg" src="${esc(r.signature)}" alt="ลายเซ็น ${esc(r.inspector)}">` : "-"}
-    <div class="acts"><button class="btn btn-danger" id="delRec">ลบบันทึกนี้</button><button class="btn btn-primary" data-close>ปิด</button></div>`);
+    <div class="acts"><button class="btn btn-danger" id="delRec">ลบบันทึกนี้ (ผู้ดูแล)</button><button class="btn btn-primary" data-close>ปิด</button></div>`);
   $("#delRec").onclick = async () => {
-    if (!await confirmBox("ลบบันทึกนี้?", `ลบผลตรวจออร์เดอร์ #${esc(r.orderNo)} ถาวร กู้คืนไม่ได้`, "ลบ", true)) return;
+    if (!await confirmBox("ลบบันทึกนี้?", `ลบผลตรวจออร์เดอร์ #${esc(r.orderNo)} ออกจากระบบ กู้คืนจากหน้าเว็บไม่ได้${S.mode === "sheets" ? "<br>รูปและลายเซ็นใน Google Drive จะถูกย้ายไปถังขยะ (กู้คืนได้ภายใน 30 วัน)" : ""}`, "ลบ", true)) return;
     try { if (await deleteRecord(r.id)) toast("ลบแล้ว"); } catch (err) { toast("ลบไม่สำเร็จ: " + (err.message || err.code || "คุณอาจไม่มีสิทธิ์แก้ไข"), true); }
   };
 }
@@ -742,6 +843,20 @@ async function deleteRecord(id){
   else { S.records = S.records.filter(r => r.id !== id); lsSet("qc_records", S.records); renderHistory(); }
   closeModal();
   return true;
+}
+async function deleteRecords(ids){
+  let n = ids.length;
+  if (S.mode === "sheets") {
+    if (!S.pin && !await askPin("ใส่รหัสผู้ดูแลเพื่อลบข้อมูล")) throw new Error("ยกเลิกแล้ว");
+    try { const j = await sheetsApi("deleteRecords", { ids, pin: S.pin }); n = j.deleted; }
+    catch (err) { if (/รหัส/.test(err.message)) { setPin(""); S.selecting = false; } throw err; }
+  } else if (S.mode === "db") {
+    for (const id of ids) await S.db.doc("qc_records/" + id).delete();
+  }
+  const set = new Set(ids);
+  S.records = S.records.filter(r => !set.has(r.id));
+  if (S.mode === "local") lsSet("qc_records", S.records);
+  return n;
 }
 /* ---------- admin PIN (checked by Apps Script, never stored in this code) ---------- */
 function setPin(pin){
