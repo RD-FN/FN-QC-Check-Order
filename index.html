@@ -179,9 +179,24 @@
 
 <!-- ============ PRODUCTS VIEW ============ -->
 <section class="view" id="view-products">
+  <div class="card lockbar" id="lockbar" hidden>
+    <div class="lock-ico" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    </div>
+    <div class="lock-txt">
+      <b id="lockTitle">รายการสินค้าถูกล็อก</b>
+      <span class="hint" id="lockHint">ใส่รหัสผู้ดูแลก่อน จึงจะนำเข้าไฟล์ เพิ่ม หรือลบสินค้าได้</span>
+    </div>
+    <form class="lock-form" id="unlockForm" autocomplete="off">
+      <label class="sr" for="pinInput">รหัสผู้ดูแล</label>
+      <input class="inp" id="pinInput" type="password" autocomplete="off" placeholder="รหัสผู้ดูแล">
+      <button class="btn btn-primary" type="submit" id="unlockBtn">ปลดล็อก</button>
+    </form>
+    <button class="btn btn-ghost" type="button" id="lockBtn" hidden>ล็อก</button>
+  </div>
   <div class="cols">
     <div class="stack">
-      <div class="card">
+      <div class="card admin-only">
         <div class="card-head"><h2>นำเข้ารายการสินค้า</h2></div>
         <label class="drop" id="drop" for="fileInput">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#11875f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg>
@@ -218,7 +233,7 @@
         <p class="hint" style="margin-top:10px">ถ้าไฟล์มีคอลัมน์เลขออร์เดอร์ ตอนตรวจให้พิมพ์หรือเลือกเลขออร์เดอร์ แล้วระบบจะแสดงเฉพาะสินค้าของออร์เดอร์นั้น และบอกว่าเช็คครบหรือยัง</p>
       </div>
 
-      <div class="card">
+      <div class="card admin-only">
         <div class="card-head"><h2>เพิ่มสินค้าทีละรายการ</h2></div>
         <form id="addForm" class="grid2">
           <div class="field full"><label class="lb" for="aName">ชื่อสินค้า <span class="req">*</span></label><input class="inp" id="aName" required></div>
@@ -234,7 +249,7 @@
     <div class="card">
       <div class="card-head">
         <h2>สินค้าในระบบ <span class="pill num" id="prodCount">0</span></h2>
-        <button class="btn btn-danger btn-sm" id="clearProducts">ลบทั้งหมด</button>
+        <button class="btn btn-danger btn-sm admin-only" id="clearProducts">ลบทั้งหมด</button>
       </div>
       <div class="search" style="margin-bottom:12px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
