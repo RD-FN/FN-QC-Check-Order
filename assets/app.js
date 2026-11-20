@@ -8,8 +8,13 @@ const MAX_PHOTOS = 6;
 const CFG = Object.assign({ SHEETS_URL: "", API_KEY: "" }, window.QC_CONFIG || {});
 
 /* ---------- version ---------- */
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.2.0";
 const CHANGELOG = [
+  { v: "1.2.0", date: "2026-11-20", notes: [
+    "ต้องใส่รหัสผู้ดูแลก่อนนำเข้าไฟล์ CSV / Excel เพิ่ม หรือลบรายการสินค้า",
+    "ต้องใส่รหัสผู้ดูแลก่อนลบบันทึกผลตรวจ",
+    "ระบบตรวจรหัสที่ฝั่ง Google (รหัสไม่อยู่ในโค้ดเว็บ) และล็อก 10 นาทีถ้าใส่ผิดเกิน 5 ครั้ง"
+  ]},
   { v: "1.1.1", date: "2026-11-20", notes: [
     "เปิดใช้งานจริงบน GitHub Pages ใช้ได้ทุกเครื่อง",
     "เชื่อม Google Sheet \"QC เช็คสินค้าก่อนจัดส่ง - ข้อมูล\" แล้ว ผลตรวจทุกรายการบันทึกลงชีตอัตโนมัติ"
@@ -40,6 +45,7 @@ const S = {
   startedAt: null,
   importMode: "merge",
   db: null, assets: null, downloads: null, mode: "local",
+  pin: (() => { try { return sessionStorage.getItem("qc_pin") || ""; } catch (e) { return ""; } })(),
   canWrite: true
 };
 
@@ -466,7 +472,7 @@ function openRecord(id){
     <div class="acts"><button class="btn btn-danger" id="delRec">ลบบันทึกนี้</button><button class="btn btn-primary" data-close>ปิด</button></div>`);
   $("#delRec").onclick = async () => {
     if (!await confirmBox("ลบบันทึกนี้?", `ลบผลตรวจออร์เดอร์ #${esc(r.orderNo)} ถาวร กู้คืนไม่ได้`, "ลบ", true)) return;
-    try { await deleteRecord(r.id); toast("ลบแล้ว"); } catch (err) { toast("ลบไม่สำเร็จ: คุณอาจไม่มีสิทธิ์แก้ไข", true); }
+    try { if (await deleteRecord(r.id)) toast("ลบแล้ว"); } catch (err) { toast("ลบไม่สำเร็จ: " + (err.message || err.code || "คุณอาจไม่มีสิทธิ์แก้ไข"), true); }
   };
 }
 
@@ -511,7 +517,7 @@ function renderProducts(){
   const q = $("#pq").value.trim().toLowerCase();
   const rows = S.products.filter(p => !q || `${p.name} ${p.code} ${p.order} ${p.category}`.toLowerCase().includes(q));
   $("#ptable").innerHTML = rows.length ? rows.slice(0, 500).map(p => `<tr><td>${esc(p.code) || "-"}</td><td>${esc(p.name)}${p.category ? `<div class="hint">${esc(p.category)}</div>` : ""}</td><td class="r num">${p.qty}</td><td>${esc(p.unit) || "-"}</td><td>${esc(p.order) || "-"}</td>
-    <td class="r"><button class="btn btn-ghost btn-sm" data-del="${p.id}" aria-label="ลบ ${esc(p.name)}">ลบ</button></td></tr>`).join("")
+    <td class="r"><button class="btn btn-ghost btn-sm admin-only" data-del="${p.id}" aria-label="ลบ ${esc(p.name)}">ลบ</button></td></tr>`).join("")
     + (rows.length > 500 ? `<tr><td colspan="6" class="hint">แสดง 500 จาก ${rows.length} รายการ ใช้ช่องค้นหาเพื่อหาสินค้าอื่น</td></tr>` : "")
     : `<tr><td colspan="6"><div class="empty" style="margin:6px 0"><h3>ยังไม่มีสินค้า</h3><p>นำเข้าไฟล์ CSV / Excel หรือเพิ่มทีละรายการ</p></div></td></tr>`;
 }
@@ -651,8 +657,8 @@ async function sheetsPull(){
 async function saveProducts(list){
   const prev = S.products; S.products = list; renderAll();
   if (S.mode === "sheets") {
-    try { await sheetsApi("saveProducts", { products: list }); lsSet("qc_products", list); }
-    catch (err) { S.products = prev; renderAll(); toast("บันทึกรายการสินค้าลง Google Sheets ไม่สำเร็จ: " + err.message, true); throw err; }
+    try { await sheetsApi("saveProducts", { products: list, pin: S.pin }); lsSet("qc_products", list); }
+    catch (err) { S.products = prev; renderAll(); if (/รหัส/.test(err.message)) setPin(""); toast("บันทึกรายการสินค้าไม่สำเร็จ: " + err.message, true); throw err; }
   } else if (S.mode === "db") {
     try { await S.db.doc("app/products").set({ items: list, updatedAt: new Date().toISOString() }); }
     catch (err) { S.products = prev; renderAll(); toast(err && err.code === "invalid_argument" ? "บันทึกไม่ได้: รายการสินค้ายาวเกินไปหรือคุณไม่มีสิทธิ์แก้ไข" : "บันทึกรายการสินค้าไม่สำเร็จ", true); throw err; }
@@ -671,12 +677,61 @@ async function saveRecord(rec){
   }
 }
 async function deleteRecord(id){
-  if (S.mode === "sheets") { await sheetsApi("deleteRecord", { id }); S.records = S.records.filter(r => r.id !== id); renderHistory(); }
+  if (S.mode === "sheets") {
+    const pin = S.pin || await askPin("ใส่รหัสผู้ดูแลเพื่อลบบันทึกนี้");
+    if (!pin) return false;
+    try { await sheetsApi("deleteRecord", { id, pin }); }
+    catch (err) { if (/รหัส/.test(err.message)) setPin(""); throw err; }
+    S.records = S.records.filter(r => r.id !== id); renderHistory(); }
   else if (S.mode === "db") await S.db.doc("qc_records/" + id).delete();
   else { S.records = S.records.filter(r => r.id !== id); lsSet("qc_records", S.records); renderHistory(); }
   closeModal();
+  return true;
 }
-function renderAll(){ renderProducts(); renderList(); }
+/* ---------- admin PIN (checked by Apps Script, never stored in this code) ---------- */
+function setPin(pin){
+  S.pin = pin || "";
+  try { pin ? sessionStorage.setItem("qc_pin", pin) : sessionStorage.removeItem("qc_pin"); } catch (e) {}
+  renderLock();
+}
+function renderLock(){
+  const enforce = S.mode === "sheets";
+  const open = !enforce || !!S.pin;
+  $("#view-products").classList.toggle("locked", !open);
+  const bar = $("#lockbar"); bar.hidden = !enforce; bar.classList.toggle("open", open);
+  $("#lockTitle").textContent = open ? "ปลดล็อกแล้ว" : "รายการสินค้าถูกล็อก";
+  $("#lockHint").textContent = open ? "นำเข้าไฟล์ เพิ่ม หรือลบสินค้าได้ กด “ล็อก” เมื่อทำเสร็จ" : "ใส่รหัสผู้ดูแลก่อน จึงจะนำเข้าไฟล์ เพิ่ม หรือลบสินค้าได้";
+  $("#unlockForm").hidden = open; $("#lockBtn").hidden = !open;
+}
+async function verifyPin(pin){
+  if (!pin) throw new Error("กรุณาใส่รหัสผู้ดูแล");
+  await sheetsApi("verifyPin", { pin });
+  setPin(pin);
+}
+$("#unlockForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = $("#unlockBtn"); btn.disabled = true;
+  try { await verifyPin($("#pinInput").value.trim()); $("#pinInput").value = ""; toast("ปลดล็อกแล้ว"); }
+  catch (err) { toast(err.message, true); }
+  finally { btn.disabled = false; }
+});
+$("#lockBtn").addEventListener("click", () => { setPin(""); toast("ล็อกรายการสินค้าแล้ว"); });
+function askPin(msg){
+  return new Promise(res => {
+    modal(`<h2>ต้องใช้รหัสผู้ดูแล</h2><p class="hint" style="font-size:.95rem">${esc(msg)}</p>
+      <form id="pinForm" autocomplete="off" style="margin-top:12px"><label class="sr" for="pinAsk">รหัสผู้ดูแล</label><input class="inp" id="pinAsk" type="password" autocomplete="off" placeholder="รหัสผู้ดูแล">
+      <div class="acts"><button type="button" class="btn btn-ghost" id="pinNo">ยกเลิก</button><button type="submit" class="btn btn-primary">ยืนยัน</button></div></form>`);
+    $("#pinAsk").focus();
+    $("#pinNo").onclick = () => { closeModal(); res(""); };
+    $("#pinForm").onsubmit = async e => {
+      e.preventDefault();
+      const pin = $("#pinAsk").value.trim();
+      try { await verifyPin(pin); closeModal(); res(pin); } catch (err) { toast(err.message, true); }
+    };
+  });
+}
+
+function renderAll(){ renderLock(); renderProducts(); renderList(); }
 $("#hrefresh").addEventListener("click", sheetsPull);
 
 function useLocal(){
