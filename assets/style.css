@@ -206,6 +206,15 @@ code{background:var(--green-50);border:1px solid var(--line);padding:1px 6px;bor
 .cl h3{font-size:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cl ul{margin:6px 0 0;padding-left:18px;font-size:.92rem}
 
+/* Product images */
+.pinfo{display:flex;align-items:center;gap:10px;min-width:0}
+.pinfo>div{min-width:0}
+.pthumb{width:52px;height:52px;border-radius:10px;object-fit:cover;flex:none;background:var(--green-50);border:1px solid var(--line);display:grid;place-items:center;color:#9cbcb0;cursor:zoom-in}
+div.pthumb{cursor:default}
+.tthumb{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--green-50);border:1px solid var(--line);display:grid;place-items:center;color:#9cbcb0;cursor:zoom-in}
+div.tthumb{cursor:default}
+.rowacts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+
 /* Admin lock (products page) */
 .lockbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px;border-left:5px solid var(--warn)}
 .lockbar[hidden]{display:none}

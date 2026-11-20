@@ -59,6 +59,7 @@
           <div class="field full">
             <span class="lb">ช่องทางการขาย</span>
             <div class="chips" id="channels"></div>
+            <input class="inp" id="channelOther" placeholder="ระบุช่องทาง เช่น Grab, ตัวแทนจำหน่าย, ขายส่ง" aria-label="ระบุช่องทางการขายอื่นๆ" hidden style="margin-top:8px">
           </div>
           <div class="field">
             <label class="lb" for="customer">ชื่อลูกค้า / ผู้รับ</label>
@@ -227,6 +228,7 @@
               <tr><td>หน่วย</td><td><code>หน่วย</code> <code>unit</code></td></tr>
               <tr><td>เลขออร์เดอร์</td><td><code>เลขออร์เดอร์</code> <code>order</code></td></tr>
               <tr><td>หมวดหมู่</td><td><code>หมวดหมู่</code> <code>category</code></td></tr>
+              <tr><td>รูปสินค้า</td><td><code>รูปสินค้า</code> <code>image</code> <span class="hint">ลิงก์รูป หรือลิงก์ Google Drive ที่แชร์แล้ว</span></td></tr>
             </tbody>
           </table>
         </div>
@@ -241,6 +243,7 @@
           <div class="field"><label class="lb" for="aOrder">เลขออร์เดอร์</label><input class="inp" id="aOrder" placeholder="เว้นว่างได้"></div>
           <div class="field"><label class="lb" for="aQty">จำนวน</label><input class="inp" id="aQty" type="number" min="1" value="1"></div>
           <div class="field"><label class="lb" for="aUnit">หน่วย</label><input class="inp" id="aUnit" placeholder="ชิ้น / ซอง / กล่อง"></div>
+          <div class="field full"><label class="lb" for="aImg">รูปสินค้า</label><input class="inp" id="aImg" type="file" accept="image/*"></div>
           <div class="field full"><button class="btn btn-primary" type="submit">เพิ่มสินค้า</button></div>
         </form>
       </div>
@@ -257,10 +260,11 @@
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th class="r">จำนวน</th><th>หน่วย</th><th>ออร์เดอร์</th><th></th></tr></thead>
+          <thead><tr><th>รูป</th><th>รหัส</th><th>ชื่อสินค้า</th><th class="r">จำนวน</th><th>หน่วย</th><th>ออร์เดอร์</th><th></th></tr></thead>
           <tbody id="ptable"></tbody>
         </table>
       </div>
+      <input type="file" id="prodImgInput" accept="image/*" hidden>
     </div>
   </div>
 </section>
