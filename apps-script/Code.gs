@@ -10,6 +10,7 @@
  *   POST {action:"saveProducts", products:[...]}
  *   POST {action:"deleteRecord", id:"QC-...", pin:"..."}
  *   POST {action:"verifyPin", pin:"..."}
+ *   POST {action:"uploadProductImage", pin:"...", data:"data:image/jpeg;base64,...", name:"..."}
  *
  * รหัสผู้ดูแล (สำหรับนำเข้า/แก้ไขรายการสินค้า และลบบันทึก) เก็บใน
  * Project Settings > Script Properties ชื่อ ADMIN_PIN — ไม่ได้อยู่ในโค้ดนี้
@@ -34,7 +35,7 @@ const RECORD_HEADERS = [
   'createdAt', 'items_json', 'missing_json', 'photos_json', 'signature_json'
 ];
 const ITEM_HEADERS = ['รหัสบันทึก', 'วันที่', 'เลขออร์เดอร์', 'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่แพ็ก', 'จำนวนที่ต้องมี', 'หน่วย', 'เวลาเช็ค', 'ผู้ตรวจ QC'];
-const PRODUCT_HEADERS = ['รหัสสินค้า', 'ชื่อสินค้า', 'จำนวน', 'หน่วย', 'เลขออร์เดอร์', 'หมวดหมู่'];
+const PRODUCT_HEADERS = ['รหัสสินค้า', 'ชื่อสินค้า', 'จำนวน', 'หน่วย', 'เลขออร์เดอร์', 'หมวดหมู่', 'รูปสินค้า'];
 const STATUS_LABEL = { complete: 'ครบตามออร์เดอร์', incomplete: 'ไม่ครบ', checked: 'ตรวจแล้ว' };
 
 // ====== เมนูใน Google Sheet ======
@@ -81,6 +82,7 @@ function doPost(e) {
       case 'verifyPin':    checkPin_(body.pin); return json_({ ok: true });
       case 'saveProducts': checkPin_(body.pin); return json_({ ok: true, count: saveProducts_(body.products || []) });
       case 'deleteRecord': checkPin_(body.pin); return json_({ ok: true, deleted: deleteRecord_(body.id) });
+      case 'uploadProductImage': checkPin_(body.pin); return json_(Object.assign({ ok: true }, uploadProductImage_(body.data, body.name)));
       default: throw new Error('ไม่รู้จักคำสั่ง: ' + body.action);
     }
   } catch (err) {
@@ -187,16 +189,26 @@ function getProducts_() {
   if (last < 2) return [];
   return sh.getRange(2, 1, last - 1, PRODUCT_HEADERS.length).getDisplayValues()
     .filter(function (r) { return r[1]; })
-    .map(function (r) { return { code: r[0], name: r[1], qty: Number(r[2]) || 1, unit: r[3], order: r[4], category: r[5] }; });
+    .map(function (r) { return { code: r[0], name: r[1], qty: Number(r[2]) || 1, unit: r[3], order: r[4], category: r[5], image: r[6] }; });
 }
 
 function saveProducts_(list) {
   const sh = ensureSheet_(SHEET_PRODUCTS, PRODUCT_HEADERS, 0);
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, PRODUCT_HEADERS.length).clearContent();
   if (!list.length) return 0;
-  const rows = list.map(function (p) { return [text_(p.code || ''), p.name || '', Number(p.qty) || 1, p.unit || '', text_(p.order || ''), p.category || '']; });
+  const rows = list.map(function (p) { return [text_(p.code || ''), p.name || '', Number(p.qty) || 1, p.unit || '', text_(p.order || ''), p.category || '', p.image || '']; });
   sh.getRange(2, 1, rows.length, PRODUCT_HEADERS.length).setValues(rows);
   return rows.length;
+}
+
+/** รูปสินค้า: เก็บใน Drive โฟลเดอร์ QC Photos/สินค้า แล้วคืนลิงก์รูปสำหรับแสดงบนเว็บ */
+function uploadProductImage_(data, name) {
+  const root = getPhotoFolder_();
+  const it = root.getFoldersByName('สินค้า');
+  const folder = it.hasNext() ? it.next() : root.createFolder('สินค้า');
+  const safe = String(name || 'product').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60);
+  const f = saveDataUrl_(folder, data, safe + '_' + Utilities.formatDate(new Date(), TIMEZONE, 'yyyyMMdd-HHmmss') + '.jpg');
+  return { id: f.getId(), url: 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w600' };
 }
 
 // ====== Helpers ======
