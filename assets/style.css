@@ -23,6 +23,7 @@
   color-scheme:light;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.55;-webkit-tap-highlight-color:transparent}
 button,input,select,textarea{font:inherit;color:inherit}
 h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance;line-height:1.25}
@@ -205,14 +206,27 @@ code{background:var(--green-50);border:1px solid var(--line);padding:1px 6px;bor
 .cl h3{font-size:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cl ul{margin:6px 0 0;padding-left:18px;font-size:.92rem}
 
+/* Admin lock (products page) */
+.lockbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px;border-left:5px solid var(--warn)}
+.lockbar[hidden]{display:none}
+.lockbar.open{border-left-color:var(--green-500)}
+.lock-ico{width:42px;height:42px;border-radius:12px;background:var(--warn-bg);color:#8a5600;display:grid;place-items:center;flex:none}
+.lockbar.open .lock-ico{background:var(--green-100);color:var(--green-700)}
+.lock-txt{display:grid;gap:2px;flex:1;min-width:200px}
+.lock-form{display:flex;gap:8px;flex-wrap:wrap}
+.lock-form .inp{width:180px}
+.lock-form .inp:not(:placeholder-shown){letter-spacing:.2em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#view-products.locked .admin-only{display:none}
+
 /* Bottom bar on phones */
 .mobilebar{display:none}
 
 @media (max-width:1020px){
-  .check-layout{grid-template-columns:1fr}
+  .check-layout{grid-template-columns:minmax(0,1fr)}
   .side{position:static}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .cols{grid-template-columns:1fr}
+  .cols{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:640px){
   .tabs{display:none}
@@ -237,4 +251,6 @@ code{background:var(--green-50);border:1px solid var(--line);padding:1px 6px;bor
   .card{padding:15px}
   .seg{width:100%}
   .seg button{flex:1}
+  .lock-form{width:100%}
+  .lock-form .inp{flex:1;width:auto}
 }
