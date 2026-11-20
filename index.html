@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QC เช็คสินค้าก่อนจัดส่ง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0b4f3a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+      </div>
+      <div style="min-width:0">
+        <h1>QC เช็คสินค้าก่อนจัดส่ง <button class="ver" id="verBtn" type="button" title="ดูประวัติเวอร์ชัน">v-</button></h1>
+        <p>ตรวจของ · ถ่ายรูป · เซ็นรับรอง ก่อนแพ็กส่งลูกค้า</p>
+      </div>
+    </div>
+    <div class="clock" aria-live="off">
+      <span class="t num" id="clockT">--:--:--</span>
+      <span class="d" id="clockD"></span>
+    </div>
+    <span class="sync local" id="sync"><i></i><span>กำลังเชื่อมต่อ…</span></span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="check" aria-selected="true">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>ตรวจสินค้า</button>
+    <button class="tab" role="tab" data-view="history" aria-selected="false">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>ประวัติการตรวจ <span class="badge num" id="histBadge">0</span></button>
+    <button class="tab" role="tab" data-view="products" aria-selected="false">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>รายการสินค้า <span class="badge num" id="prodBadge">0</span></button>
+  </nav>
+</header>
+
+<main>
+<!-- ============ CHECK VIEW ============ -->
+<section class="view active" id="view-check">
+  <div class="check-layout">
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2><span class="step">1</span>ข้อมูลออร์เดอร์</h2></div>
+        <div class="grid2">
+          <div class="field">
+            <label class="lb" for="orderNo">เลขออร์เดอร์ <span class="req">*</span></label>
+            <input class="inp" id="orderNo" list="orderList" placeholder="เช่น 2611200001" autocomplete="off">
+            <datalist id="orderList"></datalist>
+          </div>
+          <div class="field">
+            <label class="lb" for="inspector">ผู้ตรวจ QC <span class="req">*</span></label>
+            <input class="inp" id="inspector" placeholder="ชื่อ-นามสกุล ผู้ตรวจ" autocomplete="name">
+          </div>
+          <div class="field full">
+            <span class="lb">ช่องทางการขาย</span>
+            <div class="chips" id="channels"></div>
+          </div>
+          <div class="field">
+            <label class="lb" for="customer">ชื่อลูกค้า / ผู้รับ</label>
+            <input class="inp" id="customer" placeholder="ไม่บังคับ">
+          </div>
+          <div class="field">
+            <label class="lb" for="tracking">เลขพัสดุ (Tracking)</label>
+            <input class="inp" id="tracking" placeholder="ไม่บังคับ">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2><span class="step">2</span>เช็ครายการสินค้า</h2>
+          <button class="btn btn-ghost btn-sm" id="checkAll">เช็คทั้งหมดที่แสดง</button>
+        </div>
+        <p class="hint" id="orderHint" style="margin:-6px 0 12px"></p>
+        <div class="progress"><div class="bar"><i id="progBar"></i></div><b class="num" id="progText">0 รายการ</b></div>
+        <div class="toolbar">
+          <div class="search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="inp" id="q" type="search" placeholder="ค้นหาชื่อสินค้า / รหัส / บาร์โค้ด">
+          </div>
+          <div class="seg" id="filterSeg">
+            <button data-f="all" aria-pressed="true">ทั้งหมด</button>
+            <button data-f="todo" aria-pressed="false">ยังไม่เช็ค</button>
+            <button data-f="done" aria-pressed="false">เช็คแล้ว</button>
+          </div>
+        </div>
+        <div class="list" id="list"></div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="card">
+        <div class="card-head"><h2><span class="step">3</span>เวลาตรวจ</h2></div>
+        <div class="stamp">
+          <div><small>วันที่</small><b id="stDate">-</b></div>
+          <div><small>เวลาปัจจุบัน</small><b class="num" id="stTime">-</b></div>
+          <div><small>เริ่มเช็ครายการแรก</small><b class="num" id="stStart">ยังไม่เริ่ม</b></div>
+          <div><small>เช็คแล้ว</small><b class="num" id="stCount">0 รายการ</b></div>
+        </div>
+        <p class="hint" style="margin-top:10px">ระบบบันทึกวันที่และเวลาให้อัตโนมัติตอนกดบันทึก</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2><span class="step">4</span>รูปถ่ายก่อนจัดส่ง <span class="req">*</span></h2><span class="hint num" id="phCount">0/6</span></div>
+        <div class="photos" id="photos"></div>
+        <input type="file" id="phInput" accept="image/*" multiple hidden>
+        <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+        <p class="hint" style="margin-top:8px">รูปจะถูกประทับวันเวลาที่มุมล่างให้อัตโนมัติ</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2><span class="step">5</span>ลายเซ็นผู้ตรวจ <span class="req">*</span></h2></div>
+        <div class="sigwrap">
+          <canvas id="sig" aria-label="ช่องเซ็นลายเซ็น"></canvas>
+          <div class="sigline"></div>
+          <div class="sigph" id="sigph">เซ็นชื่อตรงนี้ด้วยนิ้วหรือเมาส์</div>
+        </div>
+        <div class="sigrow">
+          <span class="hint" id="sigName">ผู้ตรวจ: -</span>
+          <span style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" id="sigUndo">ย้อนกลับ</button>
+            <button class="btn btn-ghost btn-sm" id="sigClear">ล้าง</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="field" style="margin-bottom:12px">
+          <label class="lb" for="note">หมายเหตุ</label>
+          <textarea class="inp" id="note" placeholder="เช่น กล่องบุบเล็กน้อย เปลี่ยนกล่องแล้ว"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" id="saveBtn" style="min-height:54px;font-size:1.05rem">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          บันทึกผลตรวจ QC
+        </button>
+        <button class="btn btn-ghost btn-block" id="resetBtn" style="margin-top:8px">เริ่มออร์เดอร์ใหม่</button>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ HISTORY VIEW ============ -->
+<section class="view" id="view-history">
+  <div class="tiles">
+    <div class="tile"><small>ตรวจวันนี้</small><b class="num" id="tToday">0</b></div>
+    <div class="tile ok"><small>ครบตามออร์เดอร์ (วันนี้)</small><b class="num" id="tOk">0</b></div>
+    <div class="tile warn"><small>ไม่ครบ (วันนี้)</small><b class="num" id="tWarn">0</b></div>
+    <div class="tile"><small>ทั้งหมดในระบบ</small><b class="num" id="tAll">0</b></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>ประวัติการตรวจ QC</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-soft btn-sm" id="copySheet">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          คัดลอกไปวาง Google Sheets</button>
+        <button class="btn btn-soft btn-sm" id="dlCsv">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>
+          ดาวน์โหลด CSV</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input class="inp" id="hq" type="search" placeholder="ค้นหาเลขออร์เดอร์ / ผู้ตรวจ / ลูกค้า">
+      </div>
+      <input class="inp" id="hdate" type="date" style="max-width:190px" aria-label="กรองตามวันที่">
+      <button class="btn btn-ghost btn-sm" id="hclear">ล้างตัวกรอง</button>
+      <button class="btn btn-soft btn-sm" id="hrefresh" hidden>ดึงข้อมูลล่าสุด</button>
+    </div>
+    <div class="recs" id="recs"></div>
+  </div>
+</section>
+
+<!-- ============ PRODUCTS VIEW ============ -->
+<section class="view" id="view-products">
+  <div class="cols">
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2>นำเข้ารายการสินค้า</h2></div>
+        <label class="drop" id="drop" for="fileInput">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#11875f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg>
+          <h3>ลากไฟล์มาวาง หรือแตะเพื่อเลือกไฟล์</h3>
+          <p class="hint">รองรับ .csv .xlsx .xls (แถวแรกเป็นหัวคอลัมน์)</p>
+        </label>
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+        <div class="field" style="margin-top:14px">
+          <span class="lb">เมื่อนำเข้าไฟล์ใหม่</span>
+          <div class="chips" id="importMode">
+            <button class="chip" data-m="merge" aria-pressed="true">เพิ่ม / อัปเดตต่อจากเดิม</button>
+            <button class="chip" data-m="replace" aria-pressed="false">แทนที่รายการเดิมทั้งหมด</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>รูปแบบไฟล์ที่ใช้ได้</h2>
+          <button class="btn btn-soft btn-sm" id="dlTemplate">ดาวน์โหลดไฟล์ตัวอย่าง</button></div>
+        <p class="hint">ระบบจับคอลัมน์จากชื่อหัวตารางให้อัตโนมัติ ใช้ชื่อไทยหรืออังกฤษก็ได้ มีแค่คอลัมน์ชื่อสินค้าก็นำเข้าได้</p>
+        <div class="tablewrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>คอลัมน์</th><th>ชื่อหัวตารางที่รู้จัก</th></tr></thead>
+            <tbody>
+              <tr><td>ชื่อสินค้า <span class="req">*</span></td><td><code>ชื่อสินค้า</code> <code>name</code> <code>product</code></td></tr>
+              <tr><td>รหัสสินค้า</td><td><code>รหัสสินค้า</code> <code>SKU</code> <code>barcode</code></td></tr>
+              <tr><td>จำนวน</td><td><code>จำนวน</code> <code>qty</code></td></tr>
+              <tr><td>หน่วย</td><td><code>หน่วย</code> <code>unit</code></td></tr>
+              <tr><td>เลขออร์เดอร์</td><td><code>เลขออร์เดอร์</code> <code>order</code></td></tr>
+              <tr><td>หมวดหมู่</td><td><code>หมวดหมู่</code> <code>category</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin-top:10px">ถ้าไฟล์มีคอลัมน์เลขออร์เดอร์ ตอนตรวจให้พิมพ์หรือเลือกเลขออร์เดอร์ แล้วระบบจะแสดงเฉพาะสินค้าของออร์เดอร์นั้น และบอกว่าเช็คครบหรือยัง</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>เพิ่มสินค้าทีละรายการ</h2></div>
+        <form id="addForm" class="grid2">
+          <div class="field full"><label class="lb" for="aName">ชื่อสินค้า <span class="req">*</span></label><input class="inp" id="aName" required></div>
+          <div class="field"><label class="lb" for="aCode">รหัสสินค้า</label><input class="inp" id="aCode"></div>
+          <div class="field"><label class="lb" for="aOrder">เลขออร์เดอร์</label><input class="inp" id="aOrder" placeholder="เว้นว่างได้"></div>
+          <div class="field"><label class="lb" for="aQty">จำนวน</label><input class="inp" id="aQty" type="number" min="1" value="1"></div>
+          <div class="field"><label class="lb" for="aUnit">หน่วย</label><input class="inp" id="aUnit" placeholder="ชิ้น / ซอง / กล่อง"></div>
+          <div class="field full"><button class="btn btn-primary" type="submit">เพิ่มสินค้า</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>สินค้าในระบบ <span class="pill num" id="prodCount">0</span></h2>
+        <button class="btn btn-danger btn-sm" id="clearProducts">ลบทั้งหมด</button>
+      </div>
+      <div class="search" style="margin-bottom:12px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input class="inp" id="pq" type="search" placeholder="ค้นหาในรายการสินค้า">
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th class="r">จำนวน</th><th>หน่วย</th><th>ออร์เดอร์</th><th></th></tr></thead>
+          <tbody id="ptable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+<footer class="foot">
+  <span>QC เช็คสินค้าก่อนจัดส่ง</span>
+  <button type="button" class="foot-ver" id="footVer">เวอร์ชัน -</button>
+  <span id="footMode"></span>
+</footer>
+</main>
+
+<nav class="mobilebar" role="tablist">
+  <button data-view="check" aria-selected="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>ตรวจสินค้า</button>
+  <button data-view="history" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>ประวัติ</button>
+  <button data-view="products" aria-selected="false"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>สินค้า</button>
+</nav>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
