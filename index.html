@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="assets/style.css?v=1.4.1">
+<link rel="stylesheet" href="assets/style.css?v=1.5.0">
 </head>
 <body>
 
@@ -69,6 +69,11 @@
             <label class="lb" for="tracking">เลขพัสดุ (Tracking)</label>
             <input class="inp" id="tracking" placeholder="ไม่บังคับ">
           </div>
+          <div class="field full">
+            <span class="lb">บริษัทขนส่ง</span>
+            <div class="chips" id="carriers"></div>
+            <input class="inp" id="carrierOther" placeholder="ระบุบริษัทขนส่ง" aria-label="ระบุบริษัทขนส่งอื่นๆ" hidden style="margin-top:8px">
+          </div>
         </div>
       </div>
 
@@ -100,8 +105,6 @@
         <div class="stamp">
           <div><small>วันที่</small><b id="stDate">-</b></div>
           <div><small>เวลาปัจจุบัน</small><b class="num" id="stTime">-</b></div>
-          <div><small>เริ่มเช็ครายการแรก</small><b class="num" id="stStart">ยังไม่เริ่ม</b></div>
-          <div><small>เช็คแล้ว</small><b class="num" id="stCount">0 รายการ</b></div>
         </div>
         <p class="hint" style="margin-top:10px">ระบบบันทึกวันที่และเวลาให้อัตโนมัติตอนกดบันทึก</p>
       </div>
@@ -296,7 +299,7 @@
 <div class="modal" id="modal" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast" role="status"></div>
 
-<script src="config.js?v=1.4.1"></script>
-<script src="assets/app.js?v=1.4.1"></script>
+<script src="config.js?v=1.5.0"></script>
+<script src="assets/app.js?v=1.5.0"></script>
 </body>
 </html>
