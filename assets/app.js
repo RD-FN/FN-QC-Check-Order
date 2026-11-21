@@ -5,14 +5,20 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const CHANNELS = ["Shopee","Makro PRO","LINE OA","Facebook","เว็บไซต์","หน้าร้าน","อื่นๆ"];
 const OTHER = "อื่นๆ";
+const CARRIERS = ["Flash Express","J&T Express","KEX (Kerry)","ไปรษณีย์ไทย / EMS","SPX Express","Best Express","DHL","Ninja Van","Lalamove","ลูกค้ารับเอง","อื่นๆ"];
 const MAX_PHOTOS = 6;
 const IS_TOUCH = (window.matchMedia && matchMedia("(pointer:coarse)").matches) || /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 const HAS_WEBCAM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && window.isSecureContext !== false;
 const CFG = Object.assign({ SHEETS_URL: "", API_KEY: "" }, window.QC_CONFIG || {});
 
 /* ---------- version ---------- */
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.5.0";
 const CHANGELOG = [
+  { v: "1.5.0", date: "2026-11-21", notes: [
+    "เพิ่มตัวเลือกบริษัทขนส่ง (Flash, J&T, KEX, ไปรษณีย์ไทย, SPX ฯลฯ) เลือก “อื่นๆ” ต้องพิมพ์ระบุ",
+    "บันทึกบริษัทขนส่งลงชีต QC_Records คอลัมน์ “ขนส่ง” และแสดงในประวัติ / ค้นหา / ไฟล์ CSV",
+    "เอาช่อง “เริ่มเช็ครายการแรก” และ “เช็คแล้ว” ออกจากกล่องเวลาตรวจ"
+  ]},
   { v: "1.4.1", date: "2026-11-20", notes: [
     "หน้าประวัติ: เปลี่ยนช่อง “ครบตามออร์เดอร์” และ “ไม่ครบ” เป็น “สินค้าที่เช็ค (วันนี้)” และ “ผู้ตรวจ (วันนี้)”"
   ]},
@@ -58,7 +64,7 @@ const S = {
   products: [], records: [],
   checks: {},          // id -> ISO time checked
   qty: {},             // id -> number
-  filter: "all", q: "", channel: "",
+  filter: "all", q: "", channel: "", carrier: "",
   photos: [],          // {blob, url}
   startedAt: null,
   importMode: "merge",
@@ -139,6 +145,15 @@ $("#channels").addEventListener("click", e => {
   $("#channelOther").hidden = S.channel !== OTHER;
   if (S.channel === OTHER) $("#channelOther").focus();
 });
+$("#carriers").innerHTML = CARRIERS.map(c => `<button class="chip" type="button" data-c="${esc(c)}" aria-pressed="false">${esc(c)}</button>`).join("");
+$("#carriers").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  S.carrier = S.carrier === b.dataset.c ? "" : b.dataset.c;
+  $$("#carriers .chip").forEach(x => x.setAttribute("aria-pressed", x.dataset.c === S.carrier ? "true" : "false"));
+  $("#carrierOther").hidden = S.carrier !== OTHER;
+  if (S.carrier === OTHER) $("#carrierOther").focus();
+});
+function carrierValue(){ return S.carrier === OTHER ? OTHER + ": " + $("#carrierOther").value.trim() : S.carrier; }
 function channelValue(){ return S.channel === OTHER ? OTHER + ": " + $("#channelOther").value.trim() : S.channel; }
 $("#inspector").value = lsGet("qc_inspector", "");
 $("#inspector").addEventListener("input", e => { lsSet("qc_inspector", e.target.value.trim()); updateSigName(); });
@@ -218,8 +233,6 @@ function renderProgress(){
   const pct = all.length ? Math.round(done / all.length * 100) : 0;
   $("#progBar").style.width = (ao ? pct : Math.min(100, totalChecked ? 100 : 0)) + "%";
   $("#progText").textContent = ao ? `${done}/${all.length} รายการ` : `${totalChecked} รายการ`;
-  $("#stCount").textContent = `${totalChecked} รายการ`;
-  $("#stStart").textContent = S.startedAt ? hms(new Date(S.startedAt)) : "ยังไม่เริ่ม";
 }
 function toggle(id){
   if (S.checks[id]) delete S.checks[id];
@@ -441,6 +454,7 @@ $("#saveBtn").addEventListener("click", async () => {
   if (!orderNo) problems.push("กรอกเลขออร์เดอร์");
   if (!inspector) problems.push("กรอกชื่อผู้ตรวจ QC");
   if (S.channel === OTHER && !$("#channelOther").value.trim()) problems.push("ระบุช่องทางการขาย (อื่นๆ) ว่าเป็นช่องทางไหน");
+  if (S.carrier === OTHER && !$("#carrierOther").value.trim()) problems.push("ระบุบริษัทขนส่ง (อื่นๆ) ว่าเป็นเจ้าไหน");
   if (!checkedIds.length) problems.push("เช็คสินค้าอย่างน้อย 1 รายการ");
   if (!S.photos.length) problems.push("แนบรูปถ่ายก่อนจัดส่งอย่างน้อย 1 รูป");
   if (!sig.strokes.length) problems.push("เซ็นลายเซ็นผู้ตรวจ");
@@ -460,7 +474,7 @@ $("#saveBtn").addEventListener("click", async () => {
     const now = new Date();
     const items = S.products.filter(p => S.checks[p.id]).map(p => ({ code: p.code, name: p.name, unit: p.unit, qty: S.qty[p.id] ?? p.qty, expected: ao ? p.qty : null, checkedAt: S.checks[p.id] }));
     const rec = {
-      id: makeId(now), orderNo, inspector, channel: channelValue(), customer: $("#customer").value.trim(), tracking: $("#tracking").value.trim(),
+      id: makeId(now), orderNo, inspector, channel: channelValue(), customer: $("#customer").value.trim(), tracking: $("#tracking").value.trim(), carrier: carrierValue(),
       note: $("#note").value.trim(), items, itemCount: items.length, expectedCount: expected ? expected.length : null,
       missing: missing.map(p => ({ code: p.code, name: p.name, qty: p.qty })),
       status: expected ? (missing.length ? "incomplete" : "complete") : "checked",
@@ -485,6 +499,8 @@ $("#saveBtn").addEventListener("click", async () => {
 function resetForm(){
   S.checks = {}; S.qty = {}; S.startedAt = null; S.channel = "";
   $("#channelOther").value = ""; $("#channelOther").hidden = true;
+  S.carrier = ""; $("#carrierOther").value = ""; $("#carrierOther").hidden = true;
+  $$("#carriers .chip").forEach(x => x.setAttribute("aria-pressed", "false"));
   S.photos.forEach(p => URL.revokeObjectURL(p.url)); S.photos = [];
   sig.strokes = []; sigRedraw();
   ["#orderNo","#customer","#tracking","#note","#q"].forEach(s => $(s).value = ""); S.q = "";
@@ -506,7 +522,7 @@ function filteredRecords(){
   const q = $("#hq").value.trim().toLowerCase(), d = $("#hdate").value;
   return S.records.filter(r => {
     if (d && ymd(new Date(r.createdAt)) !== d) return false;
-    if (q && !(`${r.orderNo} ${r.inspector} ${r.customer} ${r.tracking} ${r.id} ${r.channel}`.toLowerCase().includes(q))) return false;
+    if (q && !(`${r.orderNo} ${r.inspector} ${r.customer} ${r.tracking} ${r.id} ${r.channel} ${r.carrier || ""}`.toLowerCase().includes(q))) return false;
     return true;
   });
 }
@@ -535,7 +551,7 @@ function renderHistory(){
       <span class="selbox" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
       ${ph ? `<img class="th" src="${esc(photoSrc(ph))}" alt="" loading="lazy">` : `<div class="th"></div>`}
       <div style="min-width:0"><h3>#${esc(r.orderNo)}</h3>
-      <div class="pills"><span class="pill ${r.status === "incomplete" ? "warn" : ""}">${statusLabel(r.status)}</span>${r.channel ? `<span class="pill ch">${esc(r.channel)}</span>` : ""}<span class="pill ch num">${r.itemCount}${r.expectedCount ? "/" + r.expectedCount : ""} รายการ</span></div>
+      <div class="pills"><span class="pill ${r.status === "incomplete" ? "warn" : ""}">${statusLabel(r.status)}</span>${r.channel ? `<span class="pill ch">${esc(r.channel)}</span>` : ""}${r.carrier ? `<span class="pill ch">${esc(r.carrier)}</span>` : ""}<span class="pill ch num">${r.itemCount}${r.expectedCount ? "/" + r.expectedCount : ""} รายการ</span></div>
       <div class="meta num">${thDate(d)} · ${hms(d)} น. · ${esc(r.inspector)}</div></div></article>`;
   }).join("") : `<div class="empty" style="grid-column:1/-1"><h3>${S.records.length ? "ไม่พบรายการตามตัวกรอง" : "ยังไม่มีประวัติการตรวจ"}</h3><p>${S.records.length ? "ลองล้างตัวกรอง" : "ผลตรวจที่บันทึกแล้วจะแสดงที่นี่"}</p></div>`;
 }
@@ -584,6 +600,7 @@ function openRecord(id){
       <div><small>ผู้ตรวจ QC</small><b>${esc(r.inspector)}</b></div>
       ${r.channel ? `<div><small>ช่องทาง</small><b>${esc(r.channel)}</b></div>` : ""}
       ${r.customer ? `<div><small>ลูกค้า</small><b>${esc(r.customer)}</b></div>` : ""}
+      ${r.carrier ? `<div><small>ขนส่ง</small><b>${esc(r.carrier)}</b></div>` : ""}
       ${r.tracking ? `<div><small>เลขพัสดุ</small><b>${esc(r.tracking)}</b></div>` : ""}
       <div><small>อุปกรณ์</small><b>${esc(r.device || "-")}</b></div>
     </div>
@@ -605,10 +622,10 @@ function openRecord(id){
 }
 
 /* ---------- export ---------- */
-const HEAD = ["รหัสบันทึก","วันที่","เวลา","เลขออร์เดอร์","ช่องทาง","ลูกค้า","เลขพัสดุ","ผู้ตรวจ QC","สถานะ","จำนวนรายการที่เช็ค","จำนวนที่ต้องมี","รายการสินค้า","ยังไม่ได้เช็ค","หมายเหตุ","จำนวนรูป","อุปกรณ์","เวลาเริ่มเช็ค"];
+const HEAD = ["รหัสบันทึก","วันที่","เวลา","เลขออร์เดอร์","ช่องทาง","ลูกค้า","ขนส่ง","เลขพัสดุ","ผู้ตรวจ QC","สถานะ","จำนวนรายการที่เช็ค","จำนวนที่ต้องมี","รายการสินค้า","ยังไม่ได้เช็ค","หมายเหตุ","จำนวนรูป","อุปกรณ์","เวลาเริ่มเช็ค"];
 function rowsForExport(){
   return filteredRecords().map(r => { const d = new Date(r.createdAt); return [
-    r.id, ymd(d), hms(d), r.orderNo, r.channel, r.customer, r.tracking, r.inspector, statusLabel(r.status), r.itemCount, r.expectedCount ?? "",
+    r.id, ymd(d), hms(d), r.orderNo, r.channel, r.customer, r.carrier || "", r.tracking, r.inspector, statusLabel(r.status), r.itemCount, r.expectedCount ?? "",
     (r.items || []).map(i => `${i.code ? i.code + " " : ""}${i.name} x${i.qty}`).join("; "),
     (r.missing || []).map(i => `${i.name} x${i.qty}`).join("; "),
     r.note, (r.photos || []).length, r.device, r.startedAt ? hms(new Date(r.startedAt)) : ""
