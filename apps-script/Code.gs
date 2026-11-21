@@ -30,7 +30,7 @@ const SHEET_ITEMS = 'QC_Items';
 const SHEET_PRODUCTS = 'Products';
 
 const RECORD_HEADERS = [
-  'รหัสบันทึก', 'วันที่', 'เวลา', 'เลขออร์เดอร์', 'ช่องทาง', 'ลูกค้า', 'เลขพัสดุ', 'ผู้ตรวจ QC',
+  'รหัสบันทึก', 'วันที่', 'เวลา', 'เลขออร์เดอร์', 'ช่องทาง', 'ลูกค้า', 'ขนส่ง', 'เลขพัสดุ', 'ผู้ตรวจ QC',
   'สถานะ', 'จำนวนรายการที่เช็ค', 'จำนวนที่ต้องมี', 'รายการสินค้า', 'ยังไม่ได้เช็ค', 'หมายเหตุ',
   'จำนวนรูป', 'ลิงก์รูป', 'ลิงก์ลายเซ็น', 'อุปกรณ์', 'เวลาเริ่มเช็ค', 'เวอร์ชันเว็บ',
   'createdAt', 'items_json', 'missing_json', 'photos_json', 'signature_json'
@@ -121,7 +121,7 @@ function saveRecord_(rec, appVersion) {
 
   const items = rec.items || [], missing = rec.missing || [];
   const row = [
-    rec.id, dateStr, timeStr, text_(rec.orderNo), rec.channel || '', rec.customer || '', text_(rec.tracking || ''), rec.inspector || '',
+    rec.id, dateStr, timeStr, text_(rec.orderNo), rec.channel || '', rec.customer || '', rec.carrier || '', text_(rec.tracking || ''), rec.inspector || '',
     STATUS_LABEL[rec.status] || rec.status || '', items.length, rec.expectedCount == null ? '' : rec.expectedCount,
     items.map(function (i) { return (i.code ? i.code + ' ' : '') + i.name + ' x' + i.qty; }).join('; '),
     missing.map(function (i) { return i.name + ' x' + i.qty; }).join('; '),
@@ -193,7 +193,7 @@ function rowToRecord_(r) {
   const status = Object.keys(STATUS_LABEL).filter(function (k) { return STATUS_LABEL[k] === H['สถานะ']; })[0] || 'checked';
   const sig = parse_(H['signature_json'], null);
   return {
-    id: String(H['รหัสบันทึก']), orderNo: untext_(H['เลขออร์เดอร์']), channel: H['ช่องทาง'], customer: H['ลูกค้า'],
+    id: String(H['รหัสบันทึก']), orderNo: untext_(H['เลขออร์เดอร์']), channel: H['ช่องทาง'], customer: H['ลูกค้า'], carrier: H['ขนส่ง'] || '',
     tracking: untext_(H['เลขพัสดุ']), inspector: H['ผู้ตรวจ QC'], status: status,
     itemCount: Number(H['จำนวนรายการที่เช็ค']) || 0, expectedCount: H['จำนวนที่ต้องมี'] === '' ? null : Number(H['จำนวนที่ต้องมี']),
     note: H['หมายเหตุ'], device: H['อุปกรณ์'], appVersion: H['เวอร์ชันเว็บ'],
@@ -239,7 +239,13 @@ function ensureSheet_(name, headers, hideLastN) {
   const ss = ss_();
   let sh = ss.getSheetByName(name);
   if (!sh) sh = ss.insertSheet(name);
-  const cur = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+  let cur = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+  // v1.5.0: เพิ่มคอลัมน์ "ขนส่ง" ก่อน "เลขพัสดุ" ในชีตเดิม โดยแทรกคอลัมน์ (ข้อมูลเก่าเลื่อนไปตรงตำแหน่ง ไม่เพี้ยน)
+  const iCarrier = headers.indexOf('ขนส่ง');
+  if (iCarrier > 0 && cur[0] === headers[0] && cur.indexOf('ขนส่ง') < 0 && cur[iCarrier] === 'เลขพัสดุ') {
+    sh.insertColumnBefore(iCarrier + 1);
+    cur = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+  }
   if (cur.join('|') !== headers.join('|')) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers])
       .setFontWeight('bold').setBackground('#11875f').setFontColor('#ffffff');
